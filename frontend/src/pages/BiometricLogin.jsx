@@ -2,21 +2,28 @@ import { useEffect, useRef, useState } from 'react';
 import CameraSelect from '../components/CameraSelect';
 import VideoFeed from '../components/VideoFeed';
 import { loadFaceModels, getBestEmbedding } from '../lib/face';
-import { apiVerify } from '../lib/api';
+import { apiVerify, apiGetUser } from '../lib/api';
 
 export default function BiometricLogin({ onAuthenticated }) {
   const [deviceId, setDeviceId] = useState('');
-  const [status, setStatus] = useState('Listo');
+  const [status, setStatus] = useState('Listo para autenticarte');
   const [badge, setBadge] = useState({ text:'Listo', type:'secondary' });
+  const [isLoading, setIsLoading] = useState(false);
+  const [userInfo, setUserInfo] = useState(null);
   const videoRef = useRef(null);
 
   useEffect(() => {
     (async () => {
       try {
+        setIsLoading(true);
+        setStatus('Cargando modelos de reconocimiento facial...');
         await loadFaceModels();
+        setStatus('Listo para autenticarte');
+        setIsLoading(false);
       } catch (e) {
         console.error('[login] Error cargando modelos:', e);
-        alert('No se pudieron cargar los modelos. Revisa la consola.');
+        setStatus('Error cargando modelos. Revisa la consola.');
+        setIsLoading(false);
       }
     })();
   }, []);
@@ -26,7 +33,8 @@ export default function BiometricLogin({ onAuthenticated }) {
   });
 
   async function verify() {
-    setStatus('Buscando rostro…'); setBadge({ text:'Procesando', type:'warning' });
+    setStatus('Buscando rostro en la imagen...'); 
+    setBadge({ text:'Procesando', type:'warning' });
 
     const emb = await getBestEmbedding(videoRef.current);
     if (!emb) {
@@ -36,14 +44,28 @@ export default function BiometricLogin({ onAuthenticated }) {
     }
 
     try {
+      setStatus('Verificando identidad...');
       const resp = await apiVerify(emb);
       console.log('[login] verify resp:', resp);
+      
       if (resp.match) {
-        setStatus(`Autenticado ✅ (score ${resp.score.toFixed(3)})`);
+        setStatus(`¡Autenticación exitosa! ✅ (confianza: ${(resp.score * 100).toFixed(1)}%)`);
         setBadge({ text:'Autenticado', type:'success' });
+        
+        // Obtener información del usuario
+        try {
+          const userResp = await apiGetUser(resp.userId);
+          if (userResp.ok) {
+            setUserInfo(userResp.user);
+            setStatus(`Bienvenido, ${userResp.user.full_name}! ✅`);
+          }
+        } catch (e) {
+          console.error('Error obteniendo datos del usuario:', e);
+        }
+        
         onAuthenticated?.(resp.userId);
       } else {
-        setStatus(`No coincide ❌ (score ${(resp.score||0).toFixed(3)})`);
+        setStatus(`No coincide ❌ (confianza: ${((resp.score||0) * 100).toFixed(1)}%)`);
         setBadge({ text:'Rechazado', type:'danger' });
       }
     } catch (e) {
@@ -53,44 +75,143 @@ export default function BiometricLogin({ onAuthenticated }) {
     }
   }
 
-  return (
-    <div className="container py-4">
-      <div className="row g-4">
-        <div className="col-lg-7">
-          <div className="card card-soft">
-            <div className="card-body p-4">
-              <div className="d-flex align-items-center justify-content-between">
-                <h2 className="title-strong h3 mb-0">Autenticación Biométrica</h2>
-                <span className={`badge text-bg-${badge.type}`} aria-live="polite">{badge.text}</span>
-              </div>
-
-              <div className="mt-3">
-                <label className="form-label fw-semibold">Cámara</label>
-                <CameraSelect value={deviceId} onChange={setDeviceId} />
-              </div>
-
-              <div className="video-wrapper mt-3">
-                <VideoFeed deviceId={deviceId} ref={videoRef} />
-              </div>
-
-              <div className="d-flex align-items-center gap-2 mt-3">
-                <button className="btn btn-success btn-lg px-4" onClick={verify}>
-                  <i className="bi bi-shield-lock me-2"></i> Autenticar
-                </button>
-                <span className="text-muted small" aria-live="polite">{status}</span>
+  if (isLoading) {
+    return (
+      <div className="container py-5">
+        <div className="row justify-content-center">
+          <div className="col-lg-8">
+            <div className="card shadow-lg border-0">
+              <div className="card-body text-center py-5">
+                <div className="spinner-border text-primary mb-3" role="status" style={{width: '3rem', height: '3rem'}}>
+                  <span className="visually-hidden">Cargando...</span>
+                </div>
+                <h4 className="text-muted">{status}</h4>
               </div>
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
 
-        <div className="col-lg-5">
-          <div className="card card-soft">
-            <div className="card-body">
-              <h5 className="fw-bold mb-2"><i className="bi bi-lightbulb me-2 text-warning"></i>Consejos</h5>
-              <ul className="mb-0 small text-muted">
-                <li>Mira de frente y céntrate en el encuadre.</li>
-                <li>Evita contraluz; usa luz frontal.</li>
-              </ul>
+  return (
+    <div className="container py-5">
+      <div className="row justify-content-center">
+        <div className="col-lg-10">
+          {/* Header */}
+          <div className="text-center mb-5">
+            <h2 className="display-6 fw-bold text-primary mb-3">
+              <i className="bi bi-shield-lock me-3"></i>
+              Autenticación Biométrica
+            </h2>
+            <p className="lead text-muted">
+              Accede a la tienda de forma segura con tu rostro
+            </p>
+          </div>
+
+          <div className="row g-4">
+            <div className="col-lg-7">
+              <div className="card shadow-lg border-0">
+                <div className="card-header bg-gradient-primary text-white py-4">
+                  <div className="d-flex align-items-center justify-content-between">
+                    <h4 className="mb-0">
+                      <i className="bi bi-camera-video me-2"></i>
+                      Verificación de Identidad
+                    </h4>
+                    <span className={`badge fs-6 text-bg-${badge.type}`} aria-live="polite">
+                      {badge.text}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="card-body p-4">
+                  <div className="mb-3">
+                    <label className="form-label fw-semibold">
+                      <i className="bi bi-camera me-2 text-primary"></i>
+                      Selecciona tu cámara
+                    </label>
+                    <CameraSelect value={deviceId} onChange={setDeviceId} />
+                  </div>
+
+                  <div className="video-wrapper mt-3">
+                    <VideoFeed deviceId={deviceId} ref={videoRef} />
+                  </div>
+
+                  <div className="text-center mt-4">
+                    <button 
+                      className="btn btn-success btn-lg px-5" 
+                      onClick={verify}
+                      disabled={!deviceId}
+                    >
+                      <i className="bi bi-shield-lock me-2"></i> 
+                      Autenticar con Rostro
+                    </button>
+                    
+                    <div className="mt-3">
+                      <span className="text-muted" aria-live="polite">{status}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-lg-5">
+              {/* Información del usuario autenticado */}
+              {userInfo && (
+                <div className="card shadow-lg border-0 mb-4">
+                  <div className="card-header bg-gradient-success text-white py-3">
+                    <h5 className="mb-0">
+                      <i className="bi bi-person-check me-2"></i>
+                      Usuario Autenticado
+                    </h5>
+                  </div>
+                  <div className="card-body">
+                    <div className="text-center mb-3">
+                      <div className="display-4 text-success mb-2">
+                        <i className="bi bi-person-circle"></i>
+                      </div>
+                      <h5 className="fw-bold">{userInfo.full_name}</h5>
+                      <p className="text-muted mb-2">Código: {userInfo.student_id}</p>
+                      <p className="text-muted mb-0">{userInfo.email}</p>
+                    </div>
+                    
+                    <div className="alert alert-success text-center">
+                      <i className="bi bi-wallet2 me-2"></i>
+                      <strong>Saldo disponible:</strong> S/ {userInfo.balance_pen}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Consejos */}
+              <div className="card shadow-lg border-0">
+                <div className="card-header bg-gradient-info text-white py-3">
+                  <h5 className="mb-0">
+                    <i className="bi bi-lightbulb me-2"></i>
+                    Consejos para una mejor autenticación
+                  </h5>
+                </div>
+                <div className="card-body">
+                  <ul className="list-unstyled mb-0">
+                    <li className="mb-2">
+                      <i className="bi bi-check-circle text-success me-2"></i>
+                      Mira de frente y céntrate en el encuadre
+                    </li>
+                    <li className="mb-2">
+                      <i className="bi bi-check-circle text-success me-2"></i>
+                      Evita contraluz; usa luz frontal
+                    </li>
+                    <li className="mb-2">
+                      <i className="bi bi-check-circle text-success me-2"></i>
+                      Mantén una distancia adecuada
+                    </li>
+                    <li className="mb-0">
+                      <i className="bi bi-check-circle text-success me-2"></i>
+                      Asegúrate de que tu rostro esté bien iluminado
+                    </li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         </div>

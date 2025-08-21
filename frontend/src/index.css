@@ -1,0 +1,283 @@
+/* Estilos personalizados para la Tienda Inteligente */
+
+/* Variables CSS personalizadas */
+:root {
+  --primary-color: #0d6efd;
+  --success-color: #198754;
+  --warning-color: #ffc107;
+  --danger-color: #dc3545;
+  --info-color: #0dcaf0;
+  --dark-color: #212529;
+  --light-color: #f8f9fa;
+}
+
+/* Estilos generales */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--light-color);
+}
+
+/* Gradientes personalizados */
+.bg-gradient-primary {
+  background: linear-gradient(135deg, var(--primary-color) 0%, #0056b3 100%);
+}
+
+.bg-gradient-success {
+  background: linear-gradient(135deg, var(--success-color) 0%, #146c43 100%);
+}
+
+.bg-gradient-warning {
+  background: linear-gradient(135deg, var(--warning-color) 0%, #e0a800 100%);
+}
+
+.bg-gradient-info {
+  background: linear-gradient(135deg, var(--info-color) 0%, #0aa2c0 100%);
+}
+
+/* Indicadores de pasos */
+.step-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.step-number {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #e9ecef;
+  color: #6c757d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-bottom: 8px;
+  transition: all 0.3s ease;
+}
+
+.step-indicator.active .step-number {
+  background-color: var(--primary-color);
+  color: white;
+  transform: scale(1.1);
+}
+
+.step-label {
+  font-size: 0.875rem;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.step-indicator.active .step-label {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.step-connector {
+  width: 60px;
+  height: 2px;
+  background-color: #e9ecef;
+  margin: 0 20px;
+  margin-top: -24px;
+}
+
+/* Tarjetas mejoradas */
+.card {
+  transition: all 0.3s ease;
+  border: none;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important;
+}
+
+.card-header {
+  border-bottom: none;
+}
+
+/* Botones mejorados */
+.btn {
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.btn-lg {
+  padding: 12px 24px;
+  font-size: 1.1rem;
+}
+
+/* Productos */
+.product-card {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.product-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.15) !important;
+}
+
+.product-img {
+  transition: transform 0.3s ease;
+}
+
+.product-card:hover .product-img {
+  transform: scale(1.05);
+}
+
+/* Video wrapper */
+.video-wrapper {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.video-el {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+
+/* Hero section */
+.hero {
+  background: linear-gradient(135deg, var(--primary-color) 0%, #0056b3 100%);
+  color: white;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(13, 110, 253, 0.3);
+}
+
+/* Alertas mejoradas */
+.alert {
+  border: none;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+/* Badges mejorados */
+.badge {
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+/* Formularios */
+.form-control {
+  border-radius: 8px;
+  border: 2px solid #e9ecef;
+  transition: all 0.3s ease;
+}
+
+.form-control:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.form-control-lg {
+  padding: 12px 16px;
+  font-size: 1.1rem;
+}
+
+/* Lista de productos */
+.list-group-item {
+  border: none;
+  border-bottom: 1px solid #e9ecef;
+  transition: background-color 0.3s ease;
+}
+
+.list-group-item:hover {
+  background-color: #f8f9fa;
+}
+
+.list-group-item:last-child {
+  border-bottom: none;
+}
+
+/* Spinners */
+.spinner-border {
+  border-width: 0.25em;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .step-connector {
+    width: 40px;
+    margin: 0 10px;
+  }
+  
+  .hero {
+    padding: 2rem !important;
+  }
+  
+  .btn-lg {
+    padding: 10px 20px;
+    font-size: 1rem;
+  }
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Estados de carga */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+
+/* Mejoras en la navegación */
+.navbar {
+  backdrop-filter: blur(10px);
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.navbar-brand {
+  font-size: 1.5rem;
+}
+
+/* Footer */
+footer {
+  margin-top: auto;
+}
+
+/* Utilidades adicionales */
+.text-gradient {
+  background: linear-gradient(135deg, var(--primary-color), var(--success-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.shadow-custom {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.border-radius-custom {
+  border-radius: 16px;
+} 
