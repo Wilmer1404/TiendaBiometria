@@ -33,6 +33,50 @@ app.get('/api/health', async (_req, res) => {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// Crear usuario: { student_id, full_name, email, balance_pen }
+app.post('/api/users', async (req, res) => {
+    try {
+        const { student_id, full_name, email, balance_pen } = req.body || {};
+        if (!student_id || !full_name || !email || !balance_pen) {
+            return res.status(400).json({ error: 'Todos los campos son requeridos' });
+        }
+
+        const result = await withTx(async (client) => {
+            // Verificar si el student_id ya existe
+            const existingUser = await client.query('SELECT 1 FROM users WHERE student_id = $1', [student_id]);
+            if (existingUser.rowCount > 0) {
+                throw new Error('El código de estudiante ya existe');
+            }
+
+            // Verificar si el email ya existe
+            const existingEmail = await client.query('SELECT 1 FROM users WHERE email = $1', [email]);
+            if (existingEmail.rowCount > 0) {
+                throw new Error('El email ya está registrado');
+            }
+
+            // Crear usuario
+            const { rows: userRows } = await client.query(
+                'INSERT INTO users (student_id, full_name, email) VALUES ($1, $2, $3) RETURNING id, student_id, full_name, email',
+                [student_id, full_name, email]
+            );
+            const user = userRows[0];
+
+            // Crear recarga inicial en wallet_ledger (el trigger automáticamente actualizará wallets)
+            await client.query(
+                'INSERT INTO wallet_ledger (user_id, amount_pen, reason) VALUES ($1, $2, $3)',
+                [user.id, balance_pen, 'topup']
+            );
+
+            return user;
+        });
+
+        res.json({ ok: true, user: result });
+    } catch (e) {
+        console.error('[createUser]', e);
+        res.status(400).json({ error: e.message || 'No se pudo crear el usuario' });
+    }
+});
+
 app.get('/api/products', async (_req, res) => {
     try {
         const { rows } = await pool.query('SELECT id, name, price_pen, image_url FROM products WHERE is_active=TRUE ORDER BY name');
@@ -45,11 +89,49 @@ app.get('/api/user/:id', async (req, res) => {
         const { id } = req.params;
         const q = `SELECT u.id, u.student_id, u.full_name, u.email,
                COALESCE(w.balance_pen,0)::numeric(12,2) AS balance_pen
-               FROM users u LEFT JOIN wallets w ON w.user_id=u.id WHERE u.id=$1`;
+               FROM users u LEFT JOIN v_wallet_balance_calc w ON w.user_id=u.id WHERE u.id=$1`;
         const { rows } = await pool.query(q, [id]);
-        if (!rows.length) return res.status(404).json({ error: 'Usuario no encontrado' });
-        res.json(rows[0]);
+        if (!rows.length) return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
+        res.json({ ok: true, user: rows[0] });
     } catch (e) { res.status(500).json({ error: 'No se pudo obtener el usuario' }); }
+});
+
+// Obtener estadísticas de autenticación del usuario
+app.get('/api/user/:id/auth-stats', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const q = `SELECT 
+            COUNT(*) as total_attempts,
+            COUNT(*) FILTER (WHERE success = true) as successful_logins,
+            COUNT(*) FILTER (WHERE success = false) as failed_logins,
+            AVG(cosine_sim) FILTER (WHERE success = true) as avg_success_score,
+            MAX(created_at) as last_attempt
+            FROM auth_logs WHERE user_id = $1`;
+        const { rows } = await pool.query(q, [id]);
+        if (!rows.length) return res.json({ total_attempts: 0, successful_logins: 0, failed_logins: 0, avg_success_score: 0, last_attempt: null });
+        res.json(rows[0]);
+    } catch (e) { res.status(500).json({ error: 'No se pudieron obtener las estadísticas' }); }
+});
+
+// Obtener historial de transacciones del usuario
+app.get('/api/user/:id/transactions', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const q = `SELECT 
+            wl.amount_pen,
+            wl.reason,
+            wl.created_at,
+            o.id as order_id,
+            o.status as order_status,
+            o.total_pen as order_total
+            FROM wallet_ledger wl
+            LEFT JOIN orders o ON wl.ref_id = o.id
+            WHERE wl.user_id = $1
+            ORDER BY wl.created_at DESC
+            LIMIT 50`;
+        const { rows } = await pool.query(q, [id]);
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: 'No se pudo obtener el historial' }); }
 });
 
 // Enrolar: { userId, embedding[128], quality? }
@@ -79,22 +161,28 @@ app.post('/api/verify', async (req, res) => {
             return res.status(400).json({ error: 'embedding[128] es requerido' });
 
         const vec = asVectorLiteral(embedding);
-        const q = `SELECT user_id, 1 - (embedding <#> $1::vector(128)) AS cosine_sim
-               FROM face_templates ORDER BY embedding <#> $1::vector(128) LIMIT 1`;
+        
+        // Usar la función helper de la base de datos para mejor rendimiento
+        const q = `SELECT user_id, cosine_sim FROM match_face_by_cosine($1::vector(128), 1)`;
         const { rows } = await pool.query(q, [vec]);
+        
         if (!rows.length) return res.json({ match: false, score: 0 });
 
         const best = rows[0];
         const score = Number(best.cosine_sim);
         const match = score >= COS_THRESHOLD;
 
+        // Registrar el intento de autenticación
         await pool.query(
             'INSERT INTO auth_logs (user_id, cosine_sim, success, reason, source_ip, user_agent) VALUES ($1,$2,$3,$4,$5,$6)',
             [best.user_id, score, match, match ? null : 'threshold_not_met', req.ip, req.headers['user-agent'] || null]
         );
 
         res.json({ match, userId: best.user_id, score });
-    } catch (e) { console.error('[verify]', e); res.status(500).json({ error: 'No se pudo verificar' }); }
+    } catch (e) { 
+        console.error('[verify]', e); 
+        res.status(500).json({ error: 'No se pudo verificar' }); 
+    }
 });
 
 // Checkout: { userId, items:[{productId, qty}] }
@@ -107,6 +195,13 @@ app.post('/api/checkout', async (req, res) => {
         const result = await withTx(async (client) => {
             const u = await client.query('SELECT 1 FROM users WHERE id=$1', [userId]);
             if (!u.rowCount) throw new Error('Usuario no encontrado');
+
+            // Obtener balance actual usando la vista calculada
+            const { rows: balanceRows } = await client.query(
+                'SELECT balance_pen FROM v_wallet_balance_calc WHERE user_id = $1',
+                [userId]
+            );
+            const currentBalance = balanceRows.length ? Number(balanceRows[0].balance_pen) : 0;
 
             const { rows: rOrder } = await client.query('INSERT INTO orders (user_id) VALUES ($1) RETURNING id', [userId]);
             const orderId = rOrder[0].id;
@@ -126,18 +221,19 @@ app.post('/api/checkout', async (req, res) => {
             const { rows: rTotal } = await client.query('SELECT total_pen FROM orders WHERE id=$1', [orderId]);
             const total = Number(rTotal[0].total_pen);
 
-            const { rows: rBal } = await client.query('SELECT balance_pen FROM wallets WHERE user_id=$1', [userId]);
-            const balance = rBal.length ? Number(rBal[0].balance_pen) : 0;
-            if (total > balance) throw new Error('Saldo insuficiente');
+            if (total > currentBalance) throw new Error('Saldo insuficiente');
 
             const { rows: rPay } = await client.query(
                 "INSERT INTO payments (order_id, amount_pen, status, method) VALUES ($1,$2,'paid','wallet') RETURNING id",
                 [orderId, total]
             );
+            
+            // Registrar el débito en wallet_ledger (el trigger automáticamente actualizará wallets)
             await client.query(
                 "INSERT INTO wallet_ledger (user_id, amount_pen, reason, ref_id) VALUES ($1,$2,'order',$3)",
                 [userId, -total, orderId]
             );
+            
             await client.query("UPDATE orders SET status='paid' WHERE id=$1", [orderId]);
 
             return { orderId, paymentId: rPay[0].id, total };
