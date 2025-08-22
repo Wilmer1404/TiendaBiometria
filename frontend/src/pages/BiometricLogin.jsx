@@ -51,19 +51,17 @@ export default function BiometricLogin({ onAuthenticated }) {
       if (resp.match) {
         setStatus(`¡Autenticación exitosa! ✅ (confianza: ${(resp.score * 100).toFixed(1)}%)`);
         setBadge({ text:'Autenticado', type:'success' });
-        
         // Obtener información del usuario
         try {
           const userResp = await apiGetUser(resp.userId);
           if (userResp.ok) {
             setUserInfo(userResp.user);
-            setStatus(`Bienvenido, ${userResp.user.full_name}! ✅`);
+            setStatus(`Confirma tu identidad: ${userResp.user.full_name}`);
           }
         } catch (e) {
           console.error('Error obteniendo datos del usuario:', e);
         }
-        
-        onAuthenticated?.(resp.userId);
+        // No llamar a onAuthenticated todavía, esperar confirmación visual
       } else {
         setStatus(`No coincide ❌ (confianza: ${((resp.score||0) * 100).toFixed(1)}%)`);
         setBadge({ text:'Rechazado', type:'danger' });
@@ -162,7 +160,7 @@ export default function BiometricLogin({ onAuthenticated }) {
                   <div className="card-header bg-gradient-success text-white py-3">
                     <h5 className="mb-0">
                       <i className="bi bi-person-check me-2"></i>
-                      Usuario Autenticado
+                      Confirma tu identidad
                     </h5>
                   </div>
                   <div className="card-body">
@@ -174,11 +172,13 @@ export default function BiometricLogin({ onAuthenticated }) {
                       <p className="text-muted mb-2">Código: {userInfo.student_id}</p>
                       <p className="text-muted mb-0">{userInfo.email}</p>
                     </div>
-                    
-                    <div className="alert alert-success text-center">
+                    <div className="alert alert-success text-center mb-3">
                       <i className="bi bi-wallet2 me-2"></i>
                       <strong>Saldo disponible:</strong> S/ {userInfo.balance_pen}
                     </div>
+                    <button className="btn btn-primary w-100" onClick={() => onAuthenticated?.(userInfo.id)}>
+                      Sí, soy yo. Acceder a la tienda
+                    </button>
                   </div>
                 </div>
               )}
