@@ -146,6 +146,9 @@ app.post('/api/enroll', async (req, res) => {
         if (!u.rowCount) return res.status(400).json({ error: 'userId no existe' });
 
         const vec = asVectorLiteral(embedding);
+        // Eliminar cualquier template anterior del usuario
+        await pool.query('DELETE FROM face_templates WHERE user_id = $1', [userId]);
+        // Insertar el nuevo template
         const q = `INSERT INTO face_templates (user_id, embedding, quality_score)
                VALUES ($1, $2::vector(128), $3) RETURNING id`;
         const { rows } = await pool.query(q, [userId, vec, quality]);
